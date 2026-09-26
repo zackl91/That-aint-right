@@ -150,7 +150,6 @@ input { font: inherit; color: inherit; }
 .timer.urgent > span { background: var(--shame); }
 .countdown { font-family: var(--mono); font-weight: 700; font-size: 28px; line-height: 1; min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
 .countdown.urgent { color: var(--shame); }
-.boss-tag { background: var(--shame); color: var(--card); padding: 3px 8px; border-radius: 6px; letter-spacing: 0.1em; }
 .pick {
   position: relative; display: block; width: 100%; padding: 0; border: 3px solid var(--ink);
   border-radius: 18px; overflow: hidden; aspect-ratio: 3 / 2; background: var(--hatch-1);

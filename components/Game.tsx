@@ -100,7 +100,6 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
   const markLoaded = (url: string) => setLoaded((l) => (l[url] ? l : { ...l, [url]: true }));
   const secondsLeft = Math.ceil(msLeft / 1000);
   const urgent = ready && secondsLeft <= 3;
-  const isBoss = round?.difficulty === 'boss';
 
   // While a result is showing, fetch the next pair so it appears instantly on Next.
   useEffect(() => {
@@ -150,14 +149,10 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
 
         <div className="row between kicker">
           <span>ROUND {index + 1} OF {rounds.length}</span>
-          {isBoss ? (
-            <span className="boss-tag">BOSS ROUND</span>
-          ) : (
-            <span>{isToday ? `DAY ${number}` : `DAY ${number} · ${formatShort(date).toUpperCase()}`}</span>
-          )}
+          <span>{isToday ? `DAY ${number}` : `DAY ${number} · ${formatShort(date).toUpperCase()}`}</span>
         </div>
         <div className="row between" style={{ alignItems: 'flex-end' }}>
-          <h1 className="display" style={{ fontSize: 30 }}>{isBoss ? 'The good fake. Which is real?' : 'Which one is real?'}</h1>
+          <h1 className="display" style={{ fontSize: 30 }}>Which one is real?</h1>
           <span className={`countdown${urgent ? ' urgent' : ''}`} aria-live="off">{ready ? secondsLeft : ROUND_SECONDS}</span>
         </div>
         <div
@@ -280,7 +275,7 @@ function Result({
     <div className={`result ${fooled ? 'result-fooled' : 'result-safe'}`} role="dialog" aria-modal="true" aria-labelledby="verdict">
       <div className="result-scroll">
         <div className="result-inner">
-          <p className="kicker">ROUND {index + 1}{round.difficulty === 'boss' ? ' · BOSS' : ''} · {timedOut ? 'TIME’S UP' : 'VERDICT'}</p>
+          <p className="kicker">ROUND {index + 1} · {timedOut ? 'TIME’S UP' : 'VERDICT'}</p>
           <div className="verdict-head">
             <div className={`stamp${fooled ? '' : ' safe'}`} aria-hidden="true">{timedOut ? 'TOO SLOW' : fooled ? 'FOOLED' : 'SURVIVED'}</div>
             <div className="big-num" aria-label={fooled ? 'minus 100 points' : 'zero points lost'}>{fooled ? '\u2212100' : '0'}</div>
