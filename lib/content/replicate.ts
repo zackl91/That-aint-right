@@ -10,13 +10,15 @@ type Prediction = {
 };
 
 export const imageModel = () => process.env.REPLICATE_IMAGE_MODEL || 'black-forest-labs/flux-schnell';
+/** Round 5 each day. Set REPLICATE_BOSS_MODEL to the same as the normal model to turn boss rounds off. */
+export const bossModel = () => process.env.REPLICATE_BOSS_MODEL || 'black-forest-labs/flux-1.1-pro';
 
-export async function generateImage(prompt: string): Promise<Buffer> {
+export async function generateImage(prompt: string, model: string = imageModel()): Promise<Buffer> {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) throw new Error('REPLICATE_API_TOKEN is not set');
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const res = await fetch(`https://api.replicate.com/v1/models/${imageModel()}/predictions`, {
+  const res = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
     method: 'POST',
     headers: { ...headers, Prefer: 'wait=55' },
     body: JSON.stringify({

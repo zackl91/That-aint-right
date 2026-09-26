@@ -35,6 +35,15 @@ export const CORRECT_LINES = [
   'Nailed it. Statistically, this was bound to happen.',
 ];
 
+export const TIMEOUT_ROASTS = [
+  'Too slow. The robot won by default.',
+  'You stared so long the pixels got uncomfortable.',
+  "Indecision is also a decision. It's the wrong one.",
+  'Time ran out. So did your credibility.',
+  'You froze. Classic deer-in-AI-headlights.',
+  "Ten seconds wasn't enough? It took the AI four to make it.",
+];
+
 export const GENERIC_TELLS = [
   'Look closer at the edges. AI loves to melt things into each other.',
   'Texture that smooth only exists in video games and AI images.',

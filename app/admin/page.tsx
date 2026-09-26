@@ -9,7 +9,7 @@ export const maxDuration = 300;
 
 type AdminRound = {
   id: string; position: number; category: string; subject: string; a_url: string; b_url: string;
-  real_side: 'A' | 'B'; tell: string | null; real_credit: string | null; ai_prompt: string | null;
+  real_side: 'A' | 'B'; difficulty?: string; tell: string | null; real_credit: string | null; ai_prompt: string | null;
 };
 type AdminPuzzle = { id: string; puzzle_date: string; status: string; rounds: AdminRound[] };
 
@@ -31,7 +31,7 @@ export default async function Admin() {
   const to = addDays(today, 14);
   const { data } = await createAdminClient()
     .from('puzzles')
-    .select('id, puzzle_date, status, rounds(id, position, category, subject, a_url, b_url, real_side, tell, real_credit, ai_prompt)')
+    .select('id, puzzle_date, status, rounds(id, position, category, subject, a_url, b_url, real_side, difficulty, tell, real_credit, ai_prompt)')
     .gte('puzzle_date', from)
     .lte('puzzle_date', to)
     .order('puzzle_date', { ascending: false });
@@ -75,7 +75,7 @@ export default async function Admin() {
           <div className="admin-rounds">
             {[...p.rounds].sort((a, b) => a.position - b.position).map((r) => (
               <div key={r.id} className="stack" style={{ gap: 6 }}>
-                <strong style={{ fontSize: 14 }}>{r.position}. {r.category}: {r.subject}</strong>
+                <strong style={{ fontSize: 14 }}>{r.position}. {r.difficulty === 'boss' && <span className="tag shame">BOSS</span>} {r.category}: {r.subject}</strong>
                 <div className="admin-pair">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={r.a_url} alt={`A (${r.real_side === 'A' ? 'real' : 'AI'})`} className={r.real_side === 'A' ? 'real' : 'fake'} />

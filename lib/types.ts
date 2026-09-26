@@ -3,6 +3,7 @@ export type Side = 'A' | 'B';
 export type RoundResult = {
   picked: Side;
   correct: boolean;
+  timed_out?: boolean;
   real_side: Side;
   tell: string | null;
   subject: string;
@@ -17,6 +18,7 @@ export type Round = {
   position: number;
   media_type: 'image' | 'video';
   category: string;
+  difficulty?: 'normal' | 'boss';
   a_url: string;
   b_url: string;
   result: RoundResult | null;

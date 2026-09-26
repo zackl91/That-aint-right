@@ -36,20 +36,27 @@ const img = (buf: Buffer): Block => ({
 });
 
 /** Turn a real photo into a prompt for a look-alike fake, plus a short subject line. */
-export async function promptFromPhoto(photo: Buffer, alt: string, query: string): Promise<{ prompt: string; subject: string }> {
+export async function promptFromPhoto(
+  photo: Buffer, alt: string, query: string, flaws: string[],
+): Promise<{ prompt: string; subject: string }> {
   const text = await ask([
     img(photo),
     {
       type: 'text',
       text:
-        `This is a real stock photo (search: "${query}", alt text: "${alt}"). ` +
-        'Write a text-to-image prompt that would produce a DIFFERENT photo that could plausibly sit next to this one: ' +
-        'same kind of subject, setting, time of day, lighting, lens and casual photographic feel (natural noise, imperfect framing). ' +
-        'Describe it as an ordinary photograph. Never mention AI, rendering, illustration or art styles. Under 80 words. ' +
-        'Also write a subject line of 3 to 8 lowercase words starting with "a" or "an", describing what both photos show. ' +
+        `This is a real photo (search: "${query}", alt text: "${alt}"). It will be shown next to an AI image in a game ` +
+        'where players must spot the real one. Write a text-to-image prompt for a DIFFERENT photo that is as hard as possible ' +
+        'to tell apart from this one: same kind of subject, setting, time of day, lighting, lens, color palette and level of polish. ' +
+        'Match the polish: if this looks like a professional shot, keep it professional; if it looks casual, keep it casual. ' +
+        'Either way, add the ordinary imperfections real cameras produce, picking whichever of these fit: ' +
+        `${flaws.join('; ')}. ` +
+        'Include a few specific, mundane background details (clutter, signage without readable text, uneven surfaces). ' +
+        'Avoid anything AI tends to get wrong: hands, readable text, reflections of people, crowds, symmetrical patterns. ' +
+        'Describe it as an ordinary photograph with a named camera or phone. Never mention AI, rendering, illustration or art styles. ' +
+        'Under 90 words. Also write a subject line of 3 to 8 lowercase words starting with "a" or "an", describing what both photos show. ' +
         'Reply with JSON only: {"prompt": "...", "subject": "..."}',
     },
-  ]);
+  ], 500);
   const out = parseJson<{ prompt: string; subject: string }>(text);
   if (!out.prompt || !out.subject) throw new Error('Claude returned an incomplete prompt');
   return out;

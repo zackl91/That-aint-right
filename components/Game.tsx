@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { Round, RoundResult, Side } from '@/lib/types';
 import { pts, pickStable } from '@/lib/format';
-import { FOOLED_ROASTS, CORRECT_LINES, verdict, coinLine } from '@/lib/copy';
+import { FOOLED_ROASTS, CORRECT_LINES, TIMEOUT_ROASTS, verdict, coinLine } from '@/lib/copy';
 import { formatShort } from '@/lib/dates';
 import { CloseIcon, ZoomIcon, CheckIcon, XIcon } from './Icons';
 
@@ -18,6 +18,9 @@ type Props = {
 };
 
 type Phase = 'pick' | 'result' | 'recap';
+type Pick = Side | 'TIMEOUT';
+
+const ROUND_SECONDS = Math.max(3, Number(process.env.NEXT_PUBLIC_ROUND_SECONDS) || 10);
 
 export default function Game({ date, number, isToday, initialRounds, lifetimeStart }: Props) {
   const [rounds, setRounds] = useState<Round[]>(initialRounds);
@@ -28,12 +31,14 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newlyFooled, setNewlyFooled] = useState(0);
+  const [loaded, setLoaded] = useState<Record<string, true>>({});
+  const [msLeft, setMsLeft] = useState(ROUND_SECONDS * 1000);
 
   const round = rounds[index];
   const fooledToday = rounds.filter((r) => r.result && !r.result.correct).length;
   const lifetime = lifetimeStart - 100 * newlyFooled;
 
-  async function pick(side: Side) {
+  async function pick(side: Pick) {
     if (busy || round.result) return;
     setBusy(true);
     setError(null);
@@ -64,10 +69,38 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
     if (nextOpen === -1) setPhase('recap');
     else {
       setIndex(nextOpen);
+      setMsLeft(ROUND_SECONDS * 1000);
       setPhase('pick');
     }
     window.scrollTo({ top: 0 });
   }
+
+  // ---- Timer: starts once both images are on screen, so slow connections aren't punished.
+  const ready = Boolean(round && loaded[round.a_url] && loaded[round.b_url]);
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  useEffect(() => {
+    if (phase !== 'pick' || !ready || busy || round?.result) return;
+    const deadline = Date.now() + ROUND_SECONDS * 1000;
+    setMsLeft(ROUND_SECONDS * 1000);
+    const id = window.setInterval(() => {
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        window.clearInterval(id);
+        setMsLeft(0);
+        pickRef.current('TIMEOUT');
+      } else {
+        setMsLeft(left);
+      }
+    }, 100);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, index, ready, busy]);
+
+  const markLoaded = (url: string) => setLoaded((l) => (l[url] ? l : { ...l, [url]: true }));
+  const secondsLeft = Math.ceil(msLeft / 1000);
+  const urgent = ready && secondsLeft <= 3;
+  const isBoss = round?.difficulty === 'boss';
 
   // While a result is showing, fetch the next pair so it appears instantly on Next.
   useEffect(() => {
@@ -117,9 +150,23 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
 
         <div className="row between kicker">
           <span>ROUND {index + 1} OF {rounds.length}</span>
-          <span>{isToday ? `DAY ${number}` : `DAY ${number} · ${formatShort(date).toUpperCase()}`}</span>
+          {isBoss ? (
+            <span className="boss-tag">BOSS ROUND</span>
+          ) : (
+            <span>{isToday ? `DAY ${number}` : `DAY ${number} · ${formatShort(date).toUpperCase()}`}</span>
+          )}
         </div>
-        <h1 className="display" style={{ fontSize: 32 }}>Which one is real?</h1>
+        <div className="row between" style={{ alignItems: 'flex-end' }}>
+          <h1 className="display" style={{ fontSize: 30 }}>{isBoss ? 'The good fake. Which is real?' : 'Which one is real?'}</h1>
+          <span className={`countdown${urgent ? ' urgent' : ''}`} aria-live="off">{ready ? secondsLeft : ROUND_SECONDS}</span>
+        </div>
+        <div
+          className={`timer${urgent ? ' urgent' : ''}`}
+          role="timer"
+          aria-label={ready ? `${secondsLeft} seconds left` : 'Timer starts when both images load'}
+        >
+          <span style={{ transform: `scaleX(${ready ? msLeft / (ROUND_SECONDS * 1000) : 1})` }} />
+        </div>
 
         <div className="pairs">
           {(['A', 'B'] as Side[]).map((side) => (
@@ -131,7 +178,12 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
                 disabled={busy}
                 aria-label={`Pick ${side} as the real one`}
               >
-                <Media url={side === 'A' ? round.a_url : round.b_url} type={round.media_type} />
+                <Media
+                  key={side === 'A' ? round.a_url : round.b_url}
+                  url={side === 'A' ? round.a_url : round.b_url}
+                  type={round.media_type}
+                  onReady={markLoaded}
+                />
                 <span className="letter">{side}</span>
               </button>
               <button type="button" className="zoom" aria-label={`Zoom in on ${side}`} onClick={() => setZoom(side)}>
@@ -142,12 +194,15 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
         </div>
 
         {error && <p className="notice err" role="alert">{error}</p>}
-        <p className="small center">Tap the real one. Use the magnifier to get a closer look first.</p>
+        <p className="small center">{ROUND_SECONDS} seconds per pair. Run out and it counts as fooled.</p>
       </main>
 
       {zoom && (
         <div className="lightbox" role="dialog" aria-modal="true" aria-label={`Option ${zoom}, zoomed`}>
           <Media url={zoom === 'A' ? round.a_url : round.b_url} type={round.media_type} controls />
+          <p className={`countdown${urgent ? ' urgent' : ''}`} style={{ color: urgent ? 'var(--shame-bright)' : 'var(--paper)', textAlign: 'center', margin: 0 }}>
+            {secondsLeft}
+          </p>
           <div className="row">
             <button type="button" className="btn btn-shame" onClick={() => pick(zoom)} disabled={busy}>
               {zoom} IS REAL
@@ -177,12 +232,27 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
   );
 }
 
-function Media({ url, type, controls }: { url: string; type: 'image' | 'video'; controls?: boolean }) {
+function Media({
+  url, type, controls, onReady,
+}: { url: string; type: 'image' | 'video'; controls?: boolean; onReady?: (url: string) => void }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const vidRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (!onReady) return;
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) onReady(url);
+    if (vidRef.current && vidRef.current.readyState >= 2) onReady(url);
+  }, [url, onReady]);
+
   if (type === 'video') {
-    return <video src={url} autoPlay muted loop playsInline controls={controls} preload="auto" />;
+    return (
+      <video ref={vidRef} src={url} autoPlay muted loop playsInline controls={controls} preload="auto"
+        onLoadedData={() => onReady?.(url)} />
+    );
   }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" draggable={false} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img ref={imgRef} src={url} alt="" draggable={false} onLoad={() => onReady?.(url)} onError={() => onReady?.(url)} />
+  );
 }
 
 function Result({
@@ -191,6 +261,7 @@ function Result({
   round: Round; result: RoundResult; index: number; fooledToday: number; lifetime: number; isLast: boolean; onNext: () => void;
 }) {
   const fooled = !result.correct;
+  const timedOut = Boolean(result.timed_out);
   const aiSide: Side = result.real_side === 'A' ? 'B' : 'A';
   const nextRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -209,13 +280,17 @@ function Result({
     <div className={`result ${fooled ? 'result-fooled' : 'result-safe'}`} role="dialog" aria-modal="true" aria-labelledby="verdict">
       <div className="result-scroll">
         <div className="result-inner">
-          <p className="kicker">ROUND {index + 1} · VERDICT</p>
+          <p className="kicker">ROUND {index + 1}{round.difficulty === 'boss' ? ' · BOSS' : ''} · {timedOut ? 'TIME’S UP' : 'VERDICT'}</p>
           <div className="verdict-head">
-            <div className={`stamp${fooled ? '' : ' safe'}`} aria-hidden="true">{fooled ? 'FOOLED' : 'SURVIVED'}</div>
+            <div className={`stamp${fooled ? '' : ' safe'}`} aria-hidden="true">{timedOut ? 'TOO SLOW' : fooled ? 'FOOLED' : 'SURVIVED'}</div>
             <div className="big-num" aria-label={fooled ? 'minus 100 points' : 'zero points lost'}>{fooled ? '\u2212100' : '0'}</div>
           </div>
           <h1 id="verdict" className="display result-title">
-            {fooled ? pickStable(FOOLED_ROASTS, round.id) : pickStable(CORRECT_LINES, round.id)}
+            {timedOut
+              ? pickStable(TIMEOUT_ROASTS, round.id)
+              : fooled
+                ? pickStable(FOOLED_ROASTS, round.id)
+                : pickStable(CORRECT_LINES, round.id)}
           </h1>
           {result.tell && (
             <p className="result-copy">
@@ -230,7 +305,7 @@ function Result({
                 <Media url={side === 'A' ? round.a_url : round.b_url} type={round.media_type} />
                 <figcaption>
                   <span>{side} · {side === result.real_side ? 'REAL' : 'AI'}</span>
-                  {side === result.picked && <span className={`tag${fooled ? ' shame' : ''}`}>YOUR PICK</span>}
+                  {!timedOut && side === result.picked && <span className={`tag${fooled ? ' shame' : ''}`}>YOUR PICK</span>}
                 </figcaption>
               </figure>
             ))}
@@ -325,7 +400,7 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
               <div key={r.id} className="card stack" style={{ padding: 10, gap: 8 }}>
                 <div className="row between" style={{ fontSize: 14 }}>
                   <strong>{i + 1}. {capitalize(r.result.subject)}</strong>
-                  <span className={`tag${r.result.correct ? '' : ' shame'}`}>{r.result.correct ? 'SURVIVED' : 'FOOLED'}</span>
+                  <span className={`tag${r.result.correct ? '' : ' shame'}`}>{r.result.correct ? 'SURVIVED' : r.result.timed_out ? 'TOO SLOW' : 'FOOLED'}</span>
                 </div>
                 <div className="reveal">
                   {(['A', 'B'] as Side[]).map((side) => (
@@ -333,7 +408,7 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
                       <Media url={side === 'A' ? r.a_url : r.b_url} type={r.media_type} />
                       <figcaption>
                         <span>{side} · {side === r.result!.real_side ? 'REAL' : 'AI'}</span>
-                        {side === r.result!.picked && <span className="tag">YOUR PICK</span>}
+                        {!r.result!.timed_out && side === r.result!.picked && <span className="tag">YOUR PICK</span>}
                       </figcaption>
                     </figure>
                   ))}

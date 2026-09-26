@@ -500,3 +500,115 @@ grant execute on all functions in schema public to service_role;
 insert into storage.buckets (id, name, public)
 values ('media', 'media', true)
 on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------
+-- Difficulty update: boss rounds, timer, data-steered subjects
+-- ---------------------------------------------------------------------
+alter table public.rounds  add column if not exists difficulty text not null default 'normal';
+alter table public.answers add column if not exists timed_out boolean not null default false;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'rounds_difficulty_check') then
+    alter table public.rounds add constraint rounds_difficulty_check check (difficulty in ('normal', 'boss'));
+  end if;
+end $$;
+
+create or replace function public.get_puzzle(p_date date) returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object(
+    'id', p.id,
+    'date', p.puzzle_date,
+    'rounds', coalesce((
+      select json_agg(json_build_object(
+        'id', r.id,
+        'position', r.position,
+        'media_type', r.media_type,
+        'category', r.category,
+        'difficulty', r.difficulty,
+        'a_url', r.a_url,
+        'b_url', r.b_url,
+        'result', case when a.round_id is null then null else json_build_object(
+          'picked', a.picked, 'correct', a.correct, 'timed_out', a.timed_out, 'real_side', r.real_side,
+          'tell', r.tell, 'subject', r.subject, 'real_credit', r.real_credit)
+        end
+      ) order by r.position)
+      from public.rounds r
+      left join public.answers a on a.round_id = r.id and a.user_id = auth.uid()
+      where r.puzzle_id = p.id
+    ), '[]'::json)
+  )
+  from public.puzzles p
+  where p.puzzle_date = p_date
+    and p.status = 'published'
+    and p.puzzle_date <= public.app_today();
+$$;
+
+-- p_pick: 'A', 'B', or 'TIMEOUT' (ran out of time; counts as fooled)
+create or replace function public.submit_answer(p_round uuid, p_pick text) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  r         public.rounds%rowtype;
+  v_pick    text := upper(p_pick);
+  v_timeout boolean := false;
+  v_correct boolean;
+  v_prev    public.answers%rowtype;
+  v_ff      int;
+  v_ft      int;
+  v_pct     int;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  if v_pick not in ('A', 'B', 'TIMEOUT') then raise exception 'Pick A or B'; end if;
+
+  select r2.* into r
+  from public.rounds r2 join public.puzzles p on p.id = r2.puzzle_id
+  where r2.id = p_round and p.status = 'published' and p.puzzle_date <= public.app_today();
+  if not found then raise exception 'That round is not available'; end if;
+
+  select * into v_prev from public.answers where user_id = auth.uid() and round_id = p_round;
+  if found then
+    v_pick := v_prev.picked;
+    v_correct := v_prev.correct;
+    v_timeout := v_prev.timed_out;
+  else
+    if v_pick = 'TIMEOUT' then
+      v_timeout := true;
+      v_pick := case when r.real_side = 'A' then 'B' else 'A' end;
+      v_correct := false;
+    else
+      v_correct := (v_pick = r.real_side);
+    end if;
+    insert into public.answers (user_id, round_id, picked, correct, timed_out)
+    values (auth.uid(), p_round, v_pick, v_correct, v_timeout);
+  end if;
+
+  select count(*) filter (where not a.correct), count(*)
+    into v_ff, v_ft
+  from public.answers a
+  join public.friendships f on f.friend_id = a.user_id and f.user_id = auth.uid()
+  where a.round_id = p_round;
+
+  select round(100.0 * count(*) filter (where not correct) / nullif(count(*), 0))
+    into v_pct
+  from public.answers where round_id = p_round;
+
+  return json_build_object(
+    'picked', v_pick, 'correct', v_correct, 'timed_out', v_timeout, 'real_side', r.real_side,
+    'tell', r.tell, 'subject', r.subject, 'real_credit', r.real_credit,
+    'friends_fooled', v_ff, 'friends_total', v_ft, 'global_fool_pct', coalesce(v_pct, 0));
+end $$;
+
+-- How often each subject fools people. Used by the content pipeline only.
+create or replace function public.content_stats(p_days int default 120)
+returns table (category text, source_query text, answers int, fooled int)
+language sql stable security definer set search_path = public as $$
+  select r.category, r.source_query,
+         count(*) filter (where not a.timed_out)::int,
+         count(*) filter (where not a.correct and not a.timed_out)::int
+  from public.answers a join public.rounds r on r.id = a.round_id
+  where a.created_at >= now() - make_interval(days => p_days)
+  group by r.category, r.source_query;
+$$;
+
+revoke execute on function public.content_stats(int) from public, anon, authenticated;
+grant  execute on function public.content_stats(int) to service_role;
+grant  execute on function public.get_puzzle(date) to anon, authenticated;
+grant  execute on function public.submit_answer(uuid, text) to authenticated;

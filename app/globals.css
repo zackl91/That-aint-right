@@ -145,6 +145,12 @@ input { font: inherit; color: inherit; }
 .progress span.safe { background: var(--ink); border-color: var(--ink); }
 .progress span.current { border: 2.5px solid var(--ink); background: var(--card); }
 .pairs { display: grid; gap: 12px; }
+.timer { height: 8px; border-radius: 4px; background: var(--hatch-1); overflow: hidden; }
+.timer > span { display: block; height: 100%; background: var(--ink); transform-origin: left center; transition: transform 100ms linear; }
+.timer.urgent > span { background: var(--shame); }
+.countdown { font-family: var(--mono); font-weight: 700; font-size: 28px; line-height: 1; min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.countdown.urgent { color: var(--shame); }
+.boss-tag { background: var(--shame); color: var(--card); padding: 3px 8px; border-radius: 6px; letter-spacing: 0.1em; }
 .pick {
   position: relative; display: block; width: 100%; padding: 0; border: 3px solid var(--ink);
   border-radius: 18px; overflow: hidden; aspect-ratio: 3 / 2; background: var(--hatch-1);
@@ -345,4 +351,5 @@ input { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .stamp, .stamp.safe { animation: none; }
   .pick { transition: none; }
+  .timer > span { transition: none; }
 }

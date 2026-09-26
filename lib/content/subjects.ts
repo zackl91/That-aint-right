@@ -50,6 +50,40 @@ export const SUBJECTS: Subject[] = Object.entries(BANK).flatMap(([category, quer
   queries.map((query) => ({ category, query })),
 );
 
+export type Steering = {
+  /** category -> weight (1 = neutral). Higher = picked more often. */
+  categoryWeights: Map<string, number>;
+  /** queries that almost never fool anyone; skipped */
+  retired: Set<string>;
+};
+
+export const NEUTRAL: Steering = { categoryWeights: new Map(), retired: new Set() };
+
+type Stat = { category: string; source_query: string | null; answers: number; fooled: number };
+
+/**
+ * Turn past results into weights. Target: pairs that fool about half of players.
+ * Categories need 30+ answers before they're weighted; queries need 20+ before retiring.
+ */
+export function steeringFrom(stats: Stat[]): Steering {
+  const byCat = new Map<string, { a: number; f: number }>();
+  const retired = new Set<string>();
+  for (const s of stats) {
+    const c = byCat.get(s.category) ?? { a: 0, f: 0 };
+    c.a += s.answers;
+    c.f += s.fooled;
+    byCat.set(s.category, c);
+    if (s.source_query && s.answers >= 20 && s.fooled / s.answers < 0.1) retired.add(s.source_query);
+  }
+  const categoryWeights = new Map<string, number>();
+  for (const [cat, { a, f }] of byCat) {
+    if (a < 30) continue;
+    const rate = f / a;
+    categoryWeights.set(cat, Math.max(0.2, 1.3 - Math.abs(rate - 0.5) * 2));
+  }
+  return { categoryWeights, retired };
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -59,25 +93,39 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+/** Weighted order without replacement (Efraimidis–Spirakis). */
+function weightedOrder<T>(items: T[], weight: (t: T) => number): T[] {
+  return items
+    .map((it) => ({ it, key: Math.pow(Math.random(), 1 / Math.max(weight(it), 0.01)) }))
+    .sort((x, y) => y.key - x.key)
+    .map((x) => x.it);
+}
+
 /**
- * Pick `count` subjects, avoiding recently used queries and spreading across categories.
- * Returns extras beyond `count` so the pipeline has fallbacks if a subject fails.
+ * Pick `count` subjects: one per category where possible, categories chosen by
+ * weight, avoiding recently used and retired queries. Returns `extras` spares.
  */
-export function pickSubjects(count: number, recentlyUsed: Set<string>, extras = 4): Subject[] {
-  const fresh = SUBJECTS.filter((s) => !recentlyUsed.has(s.query));
-  const pool = shuffle(fresh.length >= count + extras ? fresh : SUBJECTS);
+export function pickSubjects(count: number, recentlyUsed: Set<string>, extras = 4, steering: Steering = NEUTRAL): Subject[] {
+  const usable = SUBJECTS.filter((s) => !steering.retired.has(s.query));
+  const fresh = usable.filter((s) => !recentlyUsed.has(s.query));
+  const pool = fresh.length >= count + extras ? fresh : usable.length >= count + extras ? usable : SUBJECTS;
+
+  const cats = weightedOrder([...new Set(pool.map((s) => s.category))], (c) => steering.categoryWeights.get(c) ?? 1);
+  const byCat = new Map(cats.map((c) => [c, shuffle(pool.filter((s) => s.category === c))]));
+
   const picked: Subject[] = [];
-  const usedCats = new Set<string>();
-  for (const s of pool) {
-    if (picked.length >= count) break;
-    if (!usedCats.has(s.category)) {
-      picked.push(s);
-      usedCats.add(s.category);
+  // round-robin through categories in weighted order until we have enough
+  while (picked.length < count + extras) {
+    let added = false;
+    for (const c of cats) {
+      const next = byCat.get(c)!.shift();
+      if (next) {
+        picked.push(next);
+        added = true;
+        if (picked.length >= count + extras) break;
+      }
     }
-  }
-  for (const s of pool) {
-    if (picked.length >= count + extras) break;
-    if (!picked.includes(s)) picked.push(s);
+    if (!added) break;
   }
   return picked;
 }
