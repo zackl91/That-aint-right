@@ -480,6 +480,18 @@ grant execute on function public.add_friend_by_phone(text)      to authenticated
 grant execute on function public.remove_friend(uuid)            to authenticated;
 grant execute on function public.my_friends()                   to anon, authenticated;
 
+-- Explicit table access (newer Supabase projects don't grant this by default)
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select on public.profiles    to authenticated;
+grant update (display_name, handle, phone_e164) on public.profiles to authenticated;
+grant select on public.answers     to authenticated;
+grant select on public.friendships to authenticated;
+
+grant all on all tables    in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;
+
 -- ---------------------------------------------------------------------
 -- Storage for puzzle media. Public read by URL; file names are random
 -- so a URL never reveals which side is real. No listing policy exists.
