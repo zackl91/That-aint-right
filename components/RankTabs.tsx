@@ -3,12 +3,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { BoardRow } from '@/lib/types';
 import { pts, initials } from '@/lib/format';
+import { SkullIcon, ArrowIcon } from './Icons';
 
 type Board = 'friends' | 'global' | 'worst';
 const LABELS: Record<Board, string> = { friends: 'Friends', global: 'Global', worst: 'Worst %' };
 const BLURBS: Record<Board, string> = {
-  friends: 'You and the people you added. Most points lost wins, sadly.',
-  global: 'Everyone, all time, by total points lost.',
+  friends: 'You and the people you added. Fewest points lost on top.',
+  global: 'Everyone, all time. Fewest points lost on top.',
   worst: 'Share of picks that were AI. Minimum 20 rounds, so no hiding.',
 };
 
@@ -26,6 +27,14 @@ export default function RankTabs({ start, boards }: { start: Board; boards: Reco
           </button>
         ))}
       </div>
+      <Link href="/shame" className="shame-link">
+        <SkullIcon size={26} />
+        <span style={{ flex: 1 }}>
+          <strong>{tab === 'worst' ? 'Want the full hall of fame, but worse?' : 'Ready to point and laugh?'}</strong>
+          <span className="sub">See who got fooled most on the Wall of Shame.</span>
+        </span>
+        <ArrowIcon size={20} />
+      </Link>
       <div className="row between" style={{ minHeight: 44 }}>
         <p className="small" style={{ color: 'var(--muted-2)' }}>{BLURBS[tab]}</p>
         {tab === 'friends' && <Link href="/friends" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }}>Add friends</Link>}

@@ -238,7 +238,8 @@ $$;
 
 -- ---------------------------------------------------------------------
 -- Leaderboards. p_board: 'friends' | 'global' | 'worst'
--- Returns the top p_limit plus the caller's own row.
+-- Friends/Global: best first (fewest times fooled; ties go to whoever played more).
+-- Worst %: highest share of AI picks first. Returns the top p_limit plus the caller's row.
 -- ---------------------------------------------------------------------
 create or replace function public.leaderboard(p_board text, p_limit int default 25)
 returns table (rank bigint, user_id uuid, display_name text, handle text,
@@ -257,7 +258,7 @@ language sql stable security definer set search_path = public as $$
     select b.*,
            case when p_board = 'worst'
                 then rank() over (order by (b.fooled::numeric / nullif(b.rounds, 0)) desc, b.rounds desc)
-                else rank() over (order by b.fooled desc, b.rounds asc)
+                else rank() over (order by (b.rounds = 0), b.fooled asc, b.rounds desc)
            end as rnk
     from base b
   )

@@ -20,7 +20,7 @@ export default async function Ranks({ searchParams }: { searchParams: Promise<{ 
       <main className="screen" style={{ gap: 14 }}>
         <div className="stack" style={{ gap: 6 }}>
           <h1 className="display h1">Rankings</h1>
-          <p className="lede">Top of the board. Bottom of the barrel.</p>
+          <p className="lede">The least gullible people you know. Allegedly.</p>
         </div>
         <RankTabs
           start={start}

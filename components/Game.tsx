@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { Round, RoundResult, Side } from '@/lib/types';
@@ -68,6 +68,28 @@ export default function Game({ date, number, isToday, initialRounds, lifetimeSta
     }
     window.scrollTo({ top: 0 });
   }
+
+  // While a result is showing, fetch the next pair so it appears instantly on Next.
+  useEffect(() => {
+    if (phase !== 'result') return;
+    const upcoming = rounds.find((r) => !r.result);
+    if (!upcoming || upcoming.media_type !== 'image') return;
+    [upcoming.a_url, upcoming.b_url].forEach((u) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = u;
+    });
+  }, [phase, rounds]);
+
+  // Stop the page behind the result from scrolling (it steals taps on iOS).
+  useEffect(() => {
+    if (phase !== 'result') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [phase]);
 
   if (phase === 'recap') {
     return <Recap date={date} number={number} isToday={isToday} rounds={rounds} />;
@@ -170,58 +192,60 @@ function Result({
 }) {
   const fooled = !result.correct;
   const aiSide: Side = result.real_side === 'A' ? 'B' : 'A';
+  const nextRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    // Focus for keyboard users without scrolling the panel down to the button.
+    nextRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const social =
     result.friends_total && result.friends_total > 0
-      ? { text: `${result.friends_fooled} of your ${result.friends_total} friends who played got this wrong`, pct: (100 * (result.friends_fooled ?? 0)) / result.friends_total }
+      ? `${result.friends_fooled} of your ${result.friends_total} friends who played got this wrong`
       : typeof result.global_fool_pct === 'number'
-        ? { text: `${result.global_fool_pct}% of players got this wrong`, pct: result.global_fool_pct }
+        ? `${result.global_fool_pct}% of players got this wrong`
         : null;
 
   return (
     <div className={`result ${fooled ? 'result-fooled' : 'result-safe'}`} role="dialog" aria-modal="true" aria-labelledby="verdict">
-      <div className="result-inner">
-        <p className="kicker">ROUND {index + 1} · VERDICT</p>
-        <div className={`stamp${fooled ? '' : ' safe'}`} aria-hidden="true">{fooled ? 'FOOLED' : 'SURVIVED'}</div>
-        <div>
-          <div className="big-num">{fooled ? '\u2212100' : '0'}</div>
-          {!fooled && <p className="result-copy" style={{ fontSize: 14 }}>points lost. Congratulations on the bare minimum.</p>}
-        </div>
-        <h1 id="verdict" className="display" style={{ fontSize: 27, lineHeight: 1.1 }}>
-          {fooled ? pickStable(FOOLED_ROASTS, round.id) : pickStable(CORRECT_LINES, round.id)}
-        </h1>
-        {result.tell && (
-          <p className="result-copy">
-            {fooled ? `${aiSide} was the fake. ` : `${aiSide} was the fake, and here's how you could tell: `}
-            {result.tell}
-          </p>
-        )}
-
-        <div className="reveal">
-          {(['A', 'B'] as Side[]).map((side) => (
-            <figure key={side}>
-              <Media url={side === 'A' ? round.a_url : round.b_url} type={round.media_type} />
-              <figcaption>
-                <span>{side} · {side === result.real_side ? 'REAL' : 'AI'}</span>
-                {side === result.picked && <span className={`tag${fooled ? ' shame' : ''}`}>YOUR PICK</span>}
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-        {result.real_credit && <p className="result-copy" style={{ fontSize: 12, marginTop: -8 }}>Real photo: {result.real_credit}</p>}
-
-        {social && !fooled && (
-          <div className="card stack" style={{ gap: 8, textAlign: 'left', padding: 14 }}>
-            <strong style={{ fontSize: 14 }}>{social.text}</strong>
-            <div className="meter"><span style={{ width: `${Math.round(social.pct)}%` }} /></div>
+      <div className="result-scroll">
+        <div className="result-inner">
+          <p className="kicker">ROUND {index + 1} · VERDICT</p>
+          <div className="verdict-head">
+            <div className={`stamp${fooled ? '' : ' safe'}`} aria-hidden="true">{fooled ? 'FOOLED' : 'SURVIVED'}</div>
+            <div className="big-num" aria-label={fooled ? 'minus 100 points' : 'zero points lost'}>{fooled ? '\u2212100' : '0'}</div>
           </div>
-        )}
-        {social && fooled && <p className="result-copy" style={{ fontWeight: 600 }}>{social.text}. You&rsquo;re in company, at least.</p>}
+          <h1 id="verdict" className="display result-title">
+            {fooled ? pickStable(FOOLED_ROASTS, round.id) : pickStable(CORRECT_LINES, round.id)}
+          </h1>
+          {result.tell && (
+            <p className="result-copy">
+              {`${aiSide} was the fake. `}
+              {result.tell}
+            </p>
+          )}
 
-        <div className="totals">
+          <div className="reveal">
+            {(['A', 'B'] as Side[]).map((side) => (
+              <figure key={side}>
+                <Media url={side === 'A' ? round.a_url : round.b_url} type={round.media_type} />
+                <figcaption>
+                  <span>{side} · {side === result.real_side ? 'REAL' : 'AI'}</span>
+                  {side === result.picked && <span className={`tag${fooled ? ' shame' : ''}`}>YOUR PICK</span>}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          {social && <p className="result-copy result-small">{social}.{fooled ? ' You\u2019re in company, at least.' : ''}</p>}
+          {result.real_credit && <p className="result-copy result-small">Real photo: {result.real_credit}</p>}
+        </div>
+      </div>
+
+      <div className="result-actions">
+        <div className="result-totals">
           <span>TODAY {pts(-100 * fooledToday)}</span>
           <span>LIFETIME {pts(lifetime)}</span>
         </div>
-        <button type="button" className={`btn ${fooled ? 'btn-paper' : 'btn-ink'}`} onClick={onNext} autoFocus>
+        <button ref={nextRef} type="button" className={`btn ${fooled ? 'btn-paper' : 'btn-ink'}`} onClick={onNext}>
           {isLast ? 'SEE THE DAMAGE' : 'NEXT PAIR'}
         </button>
       </div>
