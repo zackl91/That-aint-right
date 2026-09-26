@@ -101,6 +101,7 @@ async function buildRounds(db: SupabaseClient, count: number, log: Log): Promise
   const recent = await recentlyUsed(db);
   const queue = pickSubjects(count, recent.queries, 5);
   const built: BuiltRound[] = [];
+  const failures: string[] = [];
 
   async function worker() {
     while (built.length < count && queue.length > 0) {
@@ -110,13 +111,18 @@ async function buildRounds(db: SupabaseClient, count: number, log: Log): Promise
         if (built.length < count) built.push(r);
         return;
       } catch (e) {
-        log(`  skipped "${subject.query}": ${(e as Error).message}`);
+        const msg = (e as Error).message;
+        failures.push(msg);
+        log(`  skipped "${subject.query}": ${msg}`);
       }
     }
   }
 
   await Promise.all(Array.from({ length: count }, worker));
-  if (built.length < count) throw new Error(`Only built ${built.length} of ${count} rounds`);
+  if (built.length < count) {
+    const reasons = [...new Set(failures)].slice(0, 3).join(' | ');
+    throw new Error(`Only built ${built.length} of ${count} rounds. ${reasons ? 'Reasons: ' + reasons : ''}`);
+  }
   return built;
 }
 

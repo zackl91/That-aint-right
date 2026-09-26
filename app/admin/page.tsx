@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { addDays, todayISO, puzzleNumber, formatLong } from '@/lib/dates';
-import { requireAdmin, setStatus, deletePuzzle, swapSides, regenerate, generateForDate } from './actions';
+import { requireAdmin, setStatus, deletePuzzle, swapSides, regenerate } from './actions';
+import GenerateForm from './GenerateForm';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type AdminRound = {
   id: string; position: number; category: string; subject: string; a_url: string; b_url: string;
@@ -49,15 +50,7 @@ export default async function Admin() {
       <section className="card stack">
         <h2 className="display h2">Build a day</h2>
         {missing.length > 0 && <p className="small">Missing in the next two weeks: {missing.map(formatLong).join(', ')}</p>}
-        <form action={generateForDate} className="row" style={{ flexWrap: 'wrap', gap: 12, display: 'flex' }}>
-          <div className="field">
-            <label htmlFor="d">Date</label>
-            <input id="d" name="date" type="date" defaultValue={missing[0] ?? addDays(today, 1)} required />
-          </div>
-          <label className="row" style={{ gap: 6 }}><input type="checkbox" name="publish" defaultChecked /> Publish</label>
-          <label className="row" style={{ gap: 6 }}><input type="checkbox" name="replace" /> Replace if it exists</label>
-          <button className="btn btn-ink btn-sm" type="submit">GENERATE (takes ~30s)</button>
-        </form>
+        <GenerateForm defaultDate={missing[0] ?? addDays(today, 1)} />
       </section>
 
       {puzzles.map((p) => (

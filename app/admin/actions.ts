@@ -43,14 +43,32 @@ export async function swapSides(formData: FormData) {
 
 export async function regenerate(formData: FormData) {
   await requireAdmin();
-  await regenerateRound(String(formData.get('id')));
+  try {
+    await regenerateRound(String(formData.get('id')));
+  } catch (e) {
+    console.error('Regenerate failed:', (e as Error).message);
+  }
   revalidatePath('/admin');
 }
 
-export async function generateForDate(formData: FormData) {
-  await requireAdmin();
-  const date = String(formData.get('date'));
-  if (!isValidISODate(date)) throw new Error('Bad date');
-  await generatePuzzle(date, { publish: formData.get('publish') === 'on', replace: formData.get('replace') === 'on' });
-  revalidatePath('/admin');
+export type ActionState = { ok: boolean; message: string } | null;
+
+export async function generateForDate(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin();
+    const date = String(formData.get('date'));
+    if (!isValidISODate(date)) return { ok: false, message: 'Pick a valid date.' };
+    const logs: string[] = [];
+    const res = await generatePuzzle(date, {
+      publish: formData.get('publish') === 'on',
+      replace: formData.get('replace') === 'on',
+      log: (m) => logs.push(m),
+    });
+    revalidatePath('/admin');
+    return res.status === 'exists'
+      ? { ok: false, message: `${date} already exists. Tick "Replace if it exists" to rebuild it.` }
+      : { ok: true, message: `Built ${date}.` };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
 }
