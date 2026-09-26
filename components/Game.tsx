@@ -328,6 +328,7 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
   const total = rounds.length;
   const score = -100 * fooled.length;
   const [shared, setShared] = useState<string | null>(null);
+  const [showText, setShowText] = useState(false);
 
   const shareText = useMemo(() => {
     const squares = rounds.map((r) => (r.result?.correct ? '\u2B1C' : '\uD83D\uDFE5')).join('');
@@ -335,16 +336,25 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
   }, [rounds, number, score, fooled.length, total]);
 
   async function share() {
-    const url = typeof window !== 'undefined' ? window.location.origin : '';
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: shareText, url });
+    const url = window.location.origin;
+    const full = `${shareText}\n${url}`;
+    // Phones: native share sheet. Send one text blob; some targets (and Safari's
+    // Copy action) drop the text when a separate url is passed.
+    const isTouch = window.matchMedia('(pointer: coarse)').matches;
+    if (isTouch && navigator.share) {
+      try {
+        await navigator.share({ text: full });
         return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
       }
-      await navigator.clipboard.writeText(`${shareText}\n${url}`);
-      setShared('Copied. Paste it in the group chat.');
+    }
+    try {
+      await navigator.clipboard.writeText(full);
+      setShared('Copied your result. Paste it in the group chat.');
     } catch {
-      /* user cancelled */
+      setShared('Copy failed. Select the text below and copy it manually.');
+      setShowText(true);
     }
   }
 
@@ -384,6 +394,7 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
         <div className="stack" style={{ gap: 10 }}>
           <button type="button" className="btn btn-shame" onClick={share}>SHARE MY SHAME</button>
           {shared && <p className="notice ok" role="status">{shared}</p>}
+          {showText && <textarea readOnly value={shareText} rows={3} style={{ width: '100%', fontFamily: 'var(--mono)', fontSize: 14, padding: 10, borderRadius: 12, border: '2px solid var(--ink)' }} />}
           <Link href="/archive" className="btn btn-outline">Play a missed day</Link>
           <Link href="/ranks" className="btn btn-outline">See where you rank</Link>
         </div>

@@ -18,14 +18,22 @@ export default function FriendsManager({ inviteCode, friends }: { inviteCode: st
 
   async function share() {
     if (!link) return;
-    const text = "I keep getting fooled by AI pictures. Come be worse than me.";
+    const text = `I keep getting fooled by AI pictures. Come be worse than me: ${link}`;
+    const isTouch = window.matchMedia('(pointer: coarse)').matches;
+    if (isTouch && navigator.share) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
     try {
-      if (navigator.share) return await navigator.share({ text, url: link });
       await navigator.clipboard.writeText(link);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      /* cancelled */
+      /* clipboard blocked; the link is visible on screen */
     }
   }
 
