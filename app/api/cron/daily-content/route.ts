@@ -17,7 +17,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const lead = Number(process.env.CONTENT_LEAD_DAYS ?? 2);
+  const parsed = parseInt(process.env.CONTENT_LEAD_DAYS ?? '', 10);
+  const lead = Number.isFinite(parsed) && parsed >= 1 ? Math.min(parsed, 14) : 2;
   const today = todayISO();
   const window = Array.from({ length: lead + 1 }, (_, i) => addDays(today, i));
 
