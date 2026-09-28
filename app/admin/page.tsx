@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { addDays, todayISO, puzzleNumber, formatLong } from '@/lib/dates';
 import { requireAdmin, setStatus, deletePuzzle, swapSides, regenerate } from './actions';
 import GenerateForm from './GenerateForm';
+import Stats from './Stats';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -45,6 +46,9 @@ export default async function Admin() {
         <h1 className="display h1">Content desk</h1>
         <Link href="/" className="btn btn-outline btn-sm">Back to game</Link>
       </div>
+      <Stats />
+
+      <h2 className="display h2" style={{ marginTop: 12 }}>Puzzles</h2>
       <p className="lede">Green border = real, red = AI. Swapping or regenerating a round clears any answers already given for it.</p>
 
       <section className="card stack">

@@ -612,3 +612,116 @@ revoke execute on function public.content_stats(int) from public, anon, authenti
 grant  execute on function public.content_stats(int) to service_role;
 grant  execute on function public.get_puzzle(date) to anon, authenticated;
 grant  execute on function public.submit_answer(uuid, text) to authenticated;
+-- ---------------------------------------------------------------------
+-- Admin dashboard stats (server-only)
+-- "Today" and "this month" use the game's timezone, same as app_today().
+-- ---------------------------------------------------------------------
+create or replace function public.admin_stats() returns json
+language plpgsql stable security definer set search_path = public, auth as $$
+declare
+  v_today date := public.app_today();
+  v_month date := date_trunc('month', public.app_today())::date;
+  v json;
+begin
+  with a as (
+    select an.*, (an.created_at at time zone 'America/New_York')::date as d
+    from public.answers an
+  ),
+  today_puzzle as (
+    select p.id, count(r.id) as n from public.puzzles p join public.rounds r on r.puzzle_id = p.id
+    where p.puzzle_date = v_today and p.status = 'published' group by p.id
+  ),
+  today_progress as (
+    select a.user_id, count(*) as answered, count(*) filter (where not a.correct) as fooled
+    from a join public.rounds r on r.id = a.round_id
+    where r.puzzle_id = (select id from today_puzzle)
+    group by a.user_id
+  ),
+  per_round as (
+    select r.id, p.puzzle_date, r.position, r.subject, r.category, r.difficulty, r.ai_model,
+           count(a.*)::int as answers,
+           count(a.*) filter (where not a.correct and not a.timed_out)::int as fooled,
+           count(a.*) filter (where a.timed_out)::int as timeouts
+    from public.rounds r join public.puzzles p on p.id = r.puzzle_id
+    left join a on a.round_id = r.id
+    group by r.id, p.puzzle_date
+  ),
+  judged as (  -- rounds with enough answers to rank
+    select *, round(100.0 * fooled / nullif(answers - timeouts, 0))::int as fool_pct
+    from per_round where answers - timeouts >= 5
+  ),
+  trend as (
+    select g::date as d,
+           (select count(distinct user_id) from a where a.d = g::date)::int as players,
+           (select count(*) from a where a.d = g::date)::int as answers,
+           (select round(100.0 * count(*) filter (where not correct) / nullif(count(*), 0)) from a where a.d = g::date)::int as fool_pct
+    from generate_series(v_today - 13, v_today, interval '1 day') g
+  )
+  select json_build_object(
+    'today', v_today,
+    'players', json_build_object(
+      'all_time',   (select count(distinct user_id) from a),
+      'this_month', (select count(distinct user_id) from a where d >= v_month),
+      'today',      (select count(distinct user_id) from a where d = v_today),
+      'returning',  (select count(*) from (select user_id from a group by user_id having count(distinct d) >= 2) x)
+    ),
+    'accounts', json_build_object(
+      'total',       (select count(*) from public.profiles),
+      'registered',  (select count(*) from auth.users u where not coalesce(u.is_anonymous, false)),
+      'guests',      (select count(*) from auth.users u where coalesce(u.is_anonymous, false)),
+      'new_month',   (select count(*) from public.profiles where (created_at at time zone 'America/New_York')::date >= v_month),
+      'new_today',   (select count(*) from public.profiles where (created_at at time zone 'America/New_York')::date = v_today),
+      'with_phone',  (select count(*) from public.profiles where phone_e164 is not null),
+      'friend_links',(select count(*) / 2 from public.friendships)
+    ),
+    'answers', json_build_object(
+      'all_time',   (select count(*) from a),
+      'this_month', (select count(*) from a where d >= v_month),
+      'today',      (select count(*) from a where d = v_today),
+      'fool_pct',   (select round(100.0 * count(*) filter (where not correct) / nullif(count(*), 0)) from a),
+      'fool_pct_month', (select round(100.0 * count(*) filter (where not correct) / nullif(count(*), 0)) from a where d >= v_month),
+      'timeout_pct',(select round(100.0 * count(*) filter (where timed_out) / nullif(count(*), 0)) from a),
+      'points_lost',(select -100 * count(*) filter (where not correct) from a)
+    ),
+    'today_puzzle', json_build_object(
+      'rounds',    (select n from today_puzzle),
+      'started',   (select count(*) from today_progress),
+      'finished',  (select count(*) from today_progress where answered >= (select n from today_puzzle)),
+      'perfect',   (select count(*) from today_progress where answered >= (select n from today_puzzle) and fooled = 0),
+      'avg_score', (select round(avg(-100 * fooled)) from today_progress where answered >= (select n from today_puzzle))
+    ),
+    'content', json_build_object(
+      'published',    (select count(*) from public.puzzles where status = 'published'),
+      'drafts',       (select count(*) from public.puzzles where status = 'draft'),
+      'days_ahead',   (select count(*) from public.puzzles where status = 'published' and puzzle_date > v_today),
+      'last_date',    (select max(puzzle_date) from public.puzzles where status = 'published'),
+      'first_date',   (select min(puzzle_date) from public.puzzles where status = 'published'),
+      'rounds_built_month', (select json_object_agg(m, n) from (
+          select coalesce(ai_model, 'unknown') as m, count(*) as n from public.rounds
+          where (created_at at time zone 'America/New_York')::date >= v_month group by 1) x)
+    ),
+    'by_difficulty', (select coalesce(json_agg(x), '[]'::json) from (
+      select difficulty, sum(answers - timeouts)::int as answers,
+             round(100.0 * sum(fooled) / nullif(sum(answers - timeouts), 0))::int as fool_pct
+      from per_round group by difficulty order by difficulty) x),
+    'by_category', (select coalesce(json_agg(x), '[]'::json) from (
+      select category, sum(answers - timeouts)::int as answers,
+             round(100.0 * sum(fooled) / nullif(sum(answers - timeouts), 0))::int as fool_pct
+      from per_round group by category having sum(answers - timeouts) > 0 order by 3 desc nulls last) x),
+    'by_model', (select coalesce(json_agg(x), '[]'::json) from (
+      select coalesce(ai_model, 'unknown') as model, count(*)::int as rounds, sum(answers - timeouts)::int as answers,
+             round(100.0 * sum(fooled) / nullif(sum(answers - timeouts), 0))::int as fool_pct
+      from per_round group by 1 order by 4 desc nulls last) x),
+    'hardest', (select coalesce(json_agg(x), '[]'::json) from (
+      select puzzle_date, position, subject, category, difficulty, answers, fool_pct from judged
+      order by fool_pct desc, answers desc limit 5) x),
+    'easiest', (select coalesce(json_agg(x), '[]'::json) from (
+      select puzzle_date, position, subject, category, difficulty, answers, fool_pct from judged
+      order by fool_pct asc, answers desc limit 5) x),
+    'trend', (select json_agg(t order by t.d) from trend t)
+  ) into v;
+  return v;
+end $$;
+
+revoke execute on function public.admin_stats() from public, anon, authenticated;
+grant  execute on function public.admin_stats() to service_role;
