@@ -46,7 +46,7 @@ input { font: inherit; color: inherit; }
 
 /* ---------- App frame ---------- */
 .app {
-  max-width: 480px;
+  width: 100%;
   margin: 0 auto;
   min-height: 100dvh;
   position: relative;
@@ -57,7 +57,11 @@ input { font: inherit; color: inherit; }
   flex-direction: column;
   gap: 16px;
   min-height: 100dvh;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
 }
+.game .screen { max-width: none; }
 .screen.no-tabs { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .screen.dark { background: var(--ink); color: var(--paper); }
 
@@ -105,6 +109,8 @@ input { font: inherit; color: inherit; }
   min-height: 52px; background: transparent; border: 2px solid currentColor;
   font-family: var(--body); font-size: 16px; font-weight: 600; letter-spacing: 0;
 }
+.btn-hero { min-height: 68px; font-size: 22px; border-radius: 16px; box-shadow: 0 5px 0 var(--ink); }
+.btn-hero:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
 .btn-sm { min-height: 44px; font-size: 14px; padding: 0 14px; border-radius: 12px; }
 .icon-btn {
   width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px;
@@ -354,9 +360,15 @@ input { font: inherit; color: inherit; }
 .admin form { display: inline; }
 
 /* ---------- Larger screens ---------- */
-@media (min-width: 900px) {
-  .game { max-width: 1040px; }
-  .pairs { grid-template-columns: 1fr 1fr; }
+@media (min-width: 760px) {
+  .game { max-width: 1280px; }
+  .game .screen { padding-left: 24px; padding-right: 24px; }
+  .pairs { grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* as big as possible while both images and the header still fit on one screen */
+  .pairs { width: 100%; max-width: calc((100dvh - 250px) * 3); margin: 0 auto; }
+  .result-inner, .result-actions { max-width: 760px; }
+  .recap { max-width: 760px !important; }
+  .lightbox img, .lightbox video { max-height: 80dvh; }
 }
 
 @media (prefers-reduced-motion: reduce) {

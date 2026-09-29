@@ -362,7 +362,7 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
 
   return (
     <>
-      <main className="screen no-tabs" style={{ gap: 18 }}>
+      <main className="screen no-tabs recap" style={{ gap: 18 }}>
         <div className="stack" style={{ gap: 6 }}>
           <p className="kicker">DAY {number} · {isToday ? 'DONE' : formatShort(date).toUpperCase()}</p>
           <h1 className="display" style={{ fontSize: 32 }}>The damage report</h1>

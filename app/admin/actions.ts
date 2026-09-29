@@ -5,12 +5,12 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generatePuzzle, regenerateRound } from '@/lib/content/pipeline';
 import { isValidISODate } from '@/lib/dates';
+import { isAdminEmail } from '@/lib/admin';
 
 export async function requireAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const allowed = (process.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-  if (!user || user.is_anonymous || !user.email || !allowed.includes(user.email.toLowerCase())) {
+  if (!user || user.is_anonymous || !isAdminEmail(user.email)) {
     throw new Error('Not allowed');
   }
   return user;

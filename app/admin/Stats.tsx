@@ -52,14 +52,14 @@ export default async function Stats() {
       <h2 className="display h2">Stats</h2>
 
       <StatGroup title="PLAYERS">
-        <Stat label="Today" value={n(s.players.today)} />
+        <Stat label="Active today" value={n(s.players.today)} sub="picked on any day's puzzle" />
         <Stat label="This month" value={n(s.players.this_month)} />
-        <Stat label="All time" value={n(s.players.all_time)} />
+        <Stat label="All time" value={n(s.players.all_time)} sub="made at least one pick" />
         <Stat label="Came back 2+ days" value={n(s.players.returning)} sub={s.players.all_time ? `${Math.round((100 * s.players.returning) / s.players.all_time)}% of players` : undefined} />
       </StatGroup>
 
       <StatGroup title={`TODAY'S PUZZLE · ${formatShort(s.today).toUpperCase()}`}>
-        <Stat label="Started" value={n(tp.started)} />
+        <Stat label="Started" value={n(tp.started)} sub="this puzzle specifically" />
         <Stat label="Finished" value={n(tp.finished)} sub={tp.started ? `${Math.round((100 * tp.finished) / tp.started)}% completion` : undefined} />
         <Stat label="Perfect 0" value={n(tp.perfect)} />
         <Stat label="Avg score" value={tp.avg_score == null ? '—' : pts(tp.avg_score)} sub="finished players" />
@@ -75,6 +75,7 @@ export default async function Stats() {
 
       <StatGroup title="ACCOUNTS">
         <Stat label="Total" value={n(s.accounts.total)} sub={`${n(s.accounts.new_today)} new today · ${n(s.accounts.new_month)} this month`} />
+        <Stat label="Never played" value={n(Math.max(0, s.accounts.total - s.players.all_time))} sub="visited, made no picks" />
         <Stat label="With email" value={n(s.accounts.registered)} />
         <Stat label="Guests" value={n(s.accounts.guests)} />
         <Stat label="Friend links" value={n(s.accounts.friend_links)} />

@@ -6,6 +6,8 @@ import { TITLES } from '@/lib/copy';
 import TabBar from '@/components/TabBar';
 import ProfileForm from '@/components/ProfileForm';
 import AccountBox from '@/components/AccountBox';
+import { isAdminEmail } from '@/lib/admin';
+import { todayISO } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +22,20 @@ export default async function Me() {
     rounds: 0, fooled: 0, points: 0, shame_streak: 0, longest_streak: 0, worst_day: 0,
     yesterday: null, unplayed_days: 0, categories: [], rank_global: null, rank_friends: null, rank_worst: null,
   };
+  if (!user) {
+    return (
+      <>
+        <main className="screen" style={{ justifyContent: 'center' }}>
+          <h1 className="display h1">No shame on file yet.</h1>
+          <p className="lede">Play today&rsquo;s puzzle and you&rsquo;ll get a profile, an embarrassing name and a score to be ashamed of.</p>
+          <Link href={`/play/${todayISO()}`} className="btn btn-shame">PLAY TODAY&rsquo;S PUZZLE</Link>
+          <Link href="/login" className="link-btn" style={{ alignSelf: 'center' }}>Already played on another device? Sign in</Link>
+        </main>
+        <TabBar active="me" />
+      </>
+    );
+  }
+  const isAdmin = !user.is_anonymous && isAdminEmail(user.email);
   const name = profile?.display_name ?? 'Loading your shame…';
   const rate = s.rounds ? Math.round((100 * s.fooled) / s.rounds) : 0;
   const ranks = [
@@ -38,6 +54,16 @@ export default async function Me() {
             <div className="small">{profile?.handle ? `@${profile.handle}` : 'No handle yet'}{user?.is_anonymous ? ' · guest' : ''}</div>
           </div>
         </header>
+
+        {isAdmin && (
+          <Link href="/admin" className="card-soft nudge">
+            <span className="stack" style={{ gap: 2 }}>
+              <strong style={{ fontSize: 16 }}>Admin: content desk &amp; stats</strong>
+              <span style={{ fontSize: 13, color: 'var(--muted-2)' }}>Only you can see this.</span>
+            </span>
+            <span aria-hidden="true" className="mono">→</span>
+          </Link>
+        )}
 
         <section className="score-hero">
           <span className="kicker">LIFETIME SCORE</span>

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import EnsureSession from '@/components/EnsureSession';
 
 export const metadata: Metadata = {
   title: "That AIn't Right",
@@ -28,7 +27,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <EnsureSession />
         <div className="app">{children}</div>
       </body>
     </html>

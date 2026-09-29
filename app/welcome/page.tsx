@@ -13,6 +13,12 @@ export default function Welcome() {
         Every day: two photos. One is real. The other was made by a computer that has never touched grass. Pick the real one.
       </p>
 
+      <a href="/welcome/start" className="btn btn-shame btn-hero">
+        PLAY TODAY&rsquo;S PUZZLE
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+      </a>
+      <p className="small center" style={{ marginTop: -8 }}>5 pairs · about a minute · no sign-up</p>
+
       <section className="card stack" style={{ gap: 14, borderRadius: 18, padding: 18 }}>
         <h2 className="display" style={{ fontSize: 18 }}>Scoring is backwards</h2>
         <Rule badge={<span className="mono" style={{ fontSize: 16 }}>0</span>} tone="ink">
@@ -28,10 +34,10 @@ export default function Welcome() {
 
       <div className="stack" style={{ gap: 10 }}>
         <a href="/welcome/start" className="btn btn-ink">LET ME GET FOOLED</a>
-        <a href="/welcome/start?next=/friends" className="btn btn-outline">Add friends first</a>
+        <a href="/welcome/start?next=/" className="link-btn" style={{ alignSelf: 'center' }}>Skip to the home screen</a>
       </div>
       <p className="small center" style={{ fontSize: 12 }}>
-        No sign-up needed to play. Add an email later to keep your shame across devices.
+        Add an email later to keep your shame across devices.
       </p>
     </main>
   );
