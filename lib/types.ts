@@ -31,6 +31,9 @@ export type Summary = {
   fooled: number;
   points: number;
   shame_streak: number;
+  play_streak: number;
+  best_play_streak: number;
+  played_today: boolean;
   longest_streak: number;
   worst_day: number;
   yesterday: { answered: number; fooled: number; total: number } | null;

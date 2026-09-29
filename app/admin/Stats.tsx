@@ -17,6 +17,12 @@ type Stats = {
   hardest: Row[];
   easiest: Row[];
   trend: { d: string; players: number; answers: number; fool_pct: number | null }[];
+  engagement?: {
+    shares_today: number; shares_month: number; shares_all: number; invites_all: number; sharers_all: number;
+    clicks_today: number; clicks_month: number; clicks_all: number;
+    next_day_pct: number | null; next_day_base: number;
+    cohorts: { day: string; new_players: number; came_back: number; complete: boolean }[];
+  };
 };
 
 // Rough Replicate prices per image. Estimates only; check replicate.com for current pricing.
@@ -57,6 +63,24 @@ export default async function Stats() {
         <Stat label="All time" value={n(s.players.all_time)} sub="made at least one pick" />
         <Stat label="Came back 2+ days" value={n(s.players.returning)} sub={s.players.all_time ? `${Math.round((100 * s.players.returning) / s.players.all_time)}% of players` : undefined} />
       </StatGroup>
+
+      {s.engagement && (
+        <StatGroup title="GROWTH">
+          <Stat
+            label="Came back next day"
+            value={pct(s.engagement.next_day_pct)}
+            sub={s.engagement.next_day_base ? `of ${n(s.engagement.next_day_base)} new players` : 'needs a full day of data'}
+          />
+          <Stat label="Result shares" value={n(s.engagement.shares_all)} sub={`${n(s.engagement.shares_today)} today · ${n(s.engagement.sharers_all)} people shared`} />
+          <Stat label="Clicks on shared links" value={n(s.engagement.clicks_all)} sub={`${n(s.engagement.clicks_today)} today · ${n(s.engagement.clicks_month)} this month`} />
+          <Stat
+            label="Clicks per share"
+            value={s.engagement.shares_all ? (s.engagement.clicks_all / s.engagement.shares_all).toFixed(1) : '—'}
+            sub="how well shares pull people in"
+          />
+          <Stat label="Invite link shares" value={n(s.engagement.invites_all)} />
+        </StatGroup>
+      )}
 
       <StatGroup title={`TODAY'S PUZZLE · ${formatShort(s.today).toUpperCase()}`}>
         <Stat label="Started" value={n(tp.started)} sub="this puzzle specifically" />
@@ -103,6 +127,20 @@ export default async function Stats() {
       </div>
 
       <div className="admin-tables">
+        {s.engagement && (
+          <Table
+            title="NEW PLAYERS · CAME BACK NEXT DAY"
+            head={['First played', 'New', 'Came back']}
+            rows={s.engagement.cohorts
+              .filter((c) => c.new_players > 0)
+              .map((c) => [
+                formatShort(c.day),
+                n(c.new_players),
+                c.complete ? `${n(c.came_back)} (${Math.round((100 * c.came_back) / c.new_players)}%)` : `${n(c.came_back)} so far`,
+              ])}
+            empty="No new players in the last two weeks"
+          />
+        )}
         <Table title="FOOLED RATE BY ROUND TYPE" rows={s.by_difficulty.map((r) => [r.difficulty === 'boss' ? 'Boss (round 5)' : 'Normal', n(r.answers), pct(r.fool_pct)])} head={['Type', 'Picks', 'Fooled']} />
         <Table title="BY MODEL" rows={s.by_model.map((r) => [r.model.replace('black-forest-labs/', ''), n(r.rounds), n(r.answers), pct(r.fool_pct)])} head={['Model', 'Rounds', 'Picks', 'Fooled']} />
         <Table title="BY CATEGORY" rows={s.by_category.map((r) => [r.category, n(r.answers), pct(r.fool_pct)])} head={['Category', 'Picks', 'Fooled']} />

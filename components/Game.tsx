@@ -8,6 +8,9 @@ import { pts, pickStable } from '@/lib/format';
 import { FOOLED_ROASTS, CORRECT_LINES, TIMEOUT_ROASTS, verdict, coinLine } from '@/lib/copy';
 import { formatShort } from '@/lib/dates';
 import { CloseIcon, ZoomIcon, CheckIcon, XIcon } from './Icons';
+import Countdown from './Countdown';
+import { patternFor, shareUrl } from '@/lib/share';
+import type { Summary } from '@/lib/types';
 
 type Props = {
   date: string;
@@ -329,17 +332,36 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
   const score = -100 * fooled.length;
   const [shared, setShared] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
+  const [name, setName] = useState<string | null>(null);
+  const [streak, setStreak] = useState<{ now: number; best: number } | null>(null);
+  const complete = rounds.every((r) => r.result);
 
+  // Load the player's name (for the share preview) and their streak after finishing.
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const [{ data: prof }, { data: sum }] = await Promise.all([
+        supabase.from('profiles').select('display_name').eq('id', user.id).single(),
+        supabase.rpc('my_summary'),
+      ]);
+      if (prof?.display_name) setName(prof.display_name);
+      const s = sum as Summary | null;
+      if (s) setStreak({ now: s.play_streak, best: s.best_play_streak });
+    })();
+  }, []);
+
+  const link = typeof window !== 'undefined' ? shareUrl(window.location.origin, date, patternFor(rounds), name) : '';
   const shareText = useMemo(() => {
     const squares = rounds.map((r) => (r.result?.correct ? '\u2B1C' : '\uD83D\uDFE5')).join('');
     return `That AIn't Right #${number}\n${squares}\n${pts(score)}. ${verdict(fooled.length, total)}.`;
   }, [rounds, number, score, fooled.length, total]);
 
   async function share() {
-    const url = window.location.origin;
-    const full = `${shareText}\n${url}`;
-    // Phones: native share sheet. Send one text blob; some targets (and Safari's
-    // Copy action) drop the text when a separate url is passed.
+    const full = `${shareText}\n${link}`;
+    createClient().rpc('log_share', { p_kind: 'result', p_date: date }).then(() => {}, () => {});
+    // Phones: native share sheet with one text blob (some targets drop text when a url is passed separately).
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
     if (isTouch && navigator.share) {
       try {
@@ -391,10 +413,26 @@ function Recap({ date, number, isToday, rounds }: { date: string; number: number
 
         <p style={{ margin: 0, fontSize: 17, fontWeight: 500 }}>{coinLine(fooled.length, total)}</p>
 
+        {complete && (
+          <div className="streak-box">
+            <div>
+              <span className="stat-label">PLAY STREAK</span>
+              <div className="stat-value">{streak ? `${streak.now} ${streak.now === 1 ? 'day' : 'days'}` : '…'}</div>
+              {streak && streak.best > streak.now && <span className="stat-sub">Best: {streak.best} days</span>}
+            </div>
+            {isToday && (
+              <div style={{ textAlign: 'right' }}>
+                <Countdown />
+                <span className="stat-sub" style={{ display: 'block' }}>Come back or the streak dies.</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="stack" style={{ gap: 10 }}>
           <button type="button" className="btn btn-shame" onClick={share}>SHARE MY SHAME</button>
           {shared && <p className="notice ok" role="status">{shared}</p>}
-          {showText && <textarea readOnly value={shareText} rows={3} style={{ width: '100%', fontFamily: 'var(--mono)', fontSize: 14, padding: 10, borderRadius: 12, border: '2px solid var(--ink)' }} />}
+          {showText && <textarea readOnly value={`${shareText}\n${link}`} rows={4} style={{ width: '100%', fontFamily: 'var(--mono)', fontSize: 14, padding: 10, borderRadius: 12, border: '2px solid var(--ink)' }} />}
           <Link href="/archive" className="btn btn-outline">Play a missed day</Link>
           <Link href="/ranks" className="btn btn-outline">See where you rank</Link>
         </div>

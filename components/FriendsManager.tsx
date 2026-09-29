@@ -19,6 +19,7 @@ export default function FriendsManager({ inviteCode, friends }: { inviteCode: st
   async function share() {
     if (!link) return;
     const text = `I keep getting fooled by AI pictures. Come be worse than me: ${link}`;
+    createClient().rpc('log_share', { p_kind: 'invite' }).then(() => {}, () => {});
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
     if (isTouch && navigator.share) {
       try {

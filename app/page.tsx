@@ -6,6 +6,7 @@ import type { Puzzle, Summary, FriendRow } from '@/lib/types';
 import Logo from '@/components/Logo';
 import TabBar from '@/components/TabBar';
 import { ArrowIcon } from '@/components/Icons';
+import Countdown from '@/components/Countdown';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ export default async function Home() {
             <>
               <h1 className="display h1">{fooledToday === 0 ? 'Clean sheet. Suspicious.' : `Fooled ${fooledToday} of ${rounds.length} times today.`}</h1>
               <Pips rounds={rounds} />
-              <p style={{ margin: 0, color: 'var(--dark-muted)' }}>{pts(-100 * fooledToday)} today. New pairs at midnight Eastern.</p>
+              <p style={{ margin: 0, color: 'var(--dark-muted)' }}>{pts(-100 * fooledToday)} today. <Countdown /></p>
               <Link href={`/play/${today}`} className="btn btn-shame">SEE THE DAMAGE</Link>
             </>
           ) : (
@@ -64,6 +65,11 @@ export default async function Home() {
                 {[photos && `${photos} photo${photos === 1 ? '' : 's'}`, videos && `${videos} video${videos === 1 ? '' : 's'}`].filter(Boolean).join(', ')}.
                 {' '}About 90 seconds of self-doubt.
               </p>
+              {s && s.play_streak > 0 && (
+                <p style={{ margin: 0, fontWeight: 700, color: 'var(--shame-bright)' }}>
+                  Keep your {s.play_streak}-day streak alive.
+                </p>
+              )}
               <Link href={`/play/${today}`} className="btn btn-shame">{answered > 0 ? 'KEEP GOING' : 'PLAY TODAY'}</Link>
             </>
           )}
@@ -71,23 +77,16 @@ export default async function Home() {
 
         <div className="grid2">
           <div className="card stack" style={{ gap: 4, padding: 14 }}>
+            <span className="stat-label">PLAY STREAK</span>
+            <span className="stat-value">{s?.play_streak ?? 0} {s?.play_streak === 1 ? 'day' : 'days'}</span>
+            <span className="stat-sub">
+              {s?.best_play_streak && s.best_play_streak > (s?.play_streak ?? 0) ? `best: ${s.best_play_streak}` : 'days in a row you finished'}
+            </span>
+          </div>
+          <div className="card stack" style={{ gap: 4, padding: 14 }}>
             <span className="stat-label">SHAME STREAK</span>
             <span className="stat-value">{s?.shame_streak ?? 0} {s?.shame_streak === 1 ? 'day' : 'days'}</span>
             <span className="stat-sub">fooled at least once, daily</span>
-          </div>
-          <div className="card stack" style={{ gap: 4, padding: 14 }}>
-            <span className="stat-label">YESTERDAY</span>
-            {s?.yesterday && s.yesterday.answered > 0 ? (
-              <>
-                <span className="stat-value">{s.yesterday.fooled} of {s.yesterday.total}</span>
-                <span className="stat-sub">{s.yesterday.fooled === 0 ? 'wrong. Unbearable.' : 'wrong. Bold strategy.'}</span>
-              </>
-            ) : (
-              <>
-                <span className="stat-value">Skipped</span>
-                <span className="stat-sub">Scared? It&rsquo;s in the archive.</span>
-              </>
-            )}
           </div>
         </div>
 

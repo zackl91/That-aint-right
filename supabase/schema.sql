@@ -320,6 +320,9 @@ declare
   v_streak  int := 0;
   v_longest int := 0;
   v_worst_day int := 0;
+  v_play_streak int := 0;
+  v_best_play int := 0;
+  v_done_today boolean := false;
   v_yday    json;
   v_unplayed int;
   v_cats    json;
@@ -347,6 +350,26 @@ begin
   select coalesce(max(len) filter (where last_day >= v_today - 1), 0),
          coalesce(max(len), 0)
     into v_streak, v_longest
+  from islands;
+
+  with done_days as (
+    select p.puzzle_date as d
+    from public.puzzles p
+    join public.rounds r on r.puzzle_id = p.id
+    left join public.answers a on a.round_id = r.id and a.user_id = uid
+    where p.status = 'published'
+    group by p.puzzle_date
+    having count(r.id) > 0 and count(a.round_id) = count(r.id)
+  ),
+  islands as (
+    select count(*)::int as len, max(d) as last_day
+    from (select d, d - (row_number() over (order by d))::int as grp from done_days) x
+    group by grp
+  )
+  select coalesce(max(len) filter (where last_day >= v_today - 1), 0),
+         coalesce(max(len), 0),
+         coalesce(bool_or(last_day = v_today), false)
+    into v_play_streak, v_best_play, v_done_today
   from islands;
 
   select coalesce(max(c), 0) into v_worst_day from (
@@ -390,6 +413,9 @@ begin
     'fooled', coalesce(v_fooled, 0),
     'points', -100 * coalesce(v_fooled, 0),
     'shame_streak', v_streak,
+    'play_streak', v_play_streak,
+    'best_play_streak', v_best_play,
+    'played_today', v_done_today,
     'longest_streak', v_longest,
     'worst_day', v_worst_day,
     'yesterday', v_yday,
@@ -613,6 +639,35 @@ grant  execute on function public.content_stats(int) to service_role;
 grant  execute on function public.get_puzzle(date) to anon, authenticated;
 grant  execute on function public.submit_answer(uuid, text) to authenticated;
 -- ---------------------------------------------------------------------
+-- Engagement tracking: share taps and clicks on shared links
+-- ---------------------------------------------------------------------
+create table if not exists public.shares (
+  id          bigserial primary key,
+  user_id     uuid references public.profiles(id) on delete set null,
+  kind        text not null check (kind in ('result', 'invite')),
+  puzzle_date date,
+  created_at  timestamptz not null default now()
+);
+create table if not exists public.share_clicks (
+  id          bigserial primary key,
+  puzzle_date date,
+  created_at  timestamptz not null default now()
+);
+alter table public.shares       enable row level security;
+alter table public.share_clicks enable row level security;
+grant all on public.shares, public.share_clicks to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
+create or replace function public.log_share(p_kind text, p_date date default null) returns void
+language sql security definer set search_path = public as $$
+  insert into public.shares (user_id, kind, puzzle_date)
+  select auth.uid(), p_kind, p_date
+  where p_kind in ('result', 'invite');
+$$;
+revoke execute on function public.log_share(text, date) from public;
+grant  execute on function public.log_share(text, date) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
 -- Admin dashboard stats (server-only)
 -- "Today" and "this month" use the game's timezone, same as app_today().
 -- ---------------------------------------------------------------------
@@ -656,6 +711,19 @@ begin
            (select count(*) from a where a.d = g::date)::int as answers,
            (select round(100.0 * count(*) filter (where not correct) / nullif(count(*), 0)) from a where a.d = g::date)::int as fool_pct
     from generate_series(v_today - 13, v_today, interval '1 day') g
+  ),
+  first_days as (
+    select user_id, min(d) as fd from a group by user_id
+  ),
+  cohort as (  -- did each player come back the day after their first day?
+    select f.fd, exists (select 1 from a where a.user_id = f.user_id and a.d = f.fd + 1) as came_back
+    from first_days f
+  ),
+  sh as (
+    select *, (created_at at time zone 'America/New_York')::date as d from public.shares
+  ),
+  sc as (
+    select *, (created_at at time zone 'America/New_York')::date as d from public.share_clicks
   )
   select json_build_object(
     'today', v_today,
@@ -718,7 +786,26 @@ begin
     'easiest', (select coalesce(json_agg(x), '[]'::json) from (
       select puzzle_date, position, subject, category, difficulty, answers, fool_pct from judged
       order by fool_pct asc, answers desc limit 5) x),
-    'trend', (select json_agg(t order by t.d) from trend t)
+    'trend', (select json_agg(t order by t.d) from trend t),
+    'engagement', json_build_object(
+      'shares_today',  (select count(*) from sh where kind = 'result' and d = v_today),
+      'shares_month',  (select count(*) from sh where kind = 'result' and d >= v_month),
+      'shares_all',    (select count(*) from sh where kind = 'result'),
+      'invites_all',   (select count(*) from sh where kind = 'invite'),
+      'sharers_all',   (select count(distinct user_id) from sh where kind = 'result'),
+      'clicks_today',  (select count(*) from sc where d = v_today),
+      'clicks_month',  (select count(*) from sc where d >= v_month),
+      'clicks_all',    (select count(*) from sc),
+      -- only cohorts whose "next day" has fully happened
+      'next_day_pct',  (select round(100.0 * count(*) filter (where came_back) / nullif(count(*), 0)) from cohort where fd < v_today - 1),
+      'next_day_base', (select count(*) from cohort where fd < v_today - 1),
+      'cohorts', (select coalesce(json_agg(x order by x.day desc), '[]'::json) from (
+        select g::date as day,
+               (select count(*) from cohort c where c.fd = g::date)::int as new_players,
+               (select count(*) from cohort c where c.fd = g::date and c.came_back)::int as came_back,
+               g::date < v_today - 1 as complete
+        from generate_series(v_today - 13, v_today - 1, interval '1 day') g) x)
+    )
   ) into v;
   return v;
 end $$;

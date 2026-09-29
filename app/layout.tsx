@@ -1,8 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { siteUrl } from '@/lib/share';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
   title: "That AIn't Right",
+  openGraph: { images: [{ url: '/api/og', width: 1200, height: 630 }] },
+  twitter: { card: 'summary_large_image', images: ['/api/og'] },
   description: 'One is real. One is AI. Pick the real one. Lose 100 points every time a computer fools you.',
   appleWebApp: { capable: true, title: "That AIn't Right", statusBarStyle: 'default' },
 };
